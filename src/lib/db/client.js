@@ -35,6 +35,8 @@ export function createConnection(server, database) {
     executeQuery: executeQuery.bind(null, server, database),
     listDatabases: listDatabases.bind(null, server, database),
     selectTop: selectTop.bind(null, server, database),
+    isSelectableType: isSelectableType.bind(null, server, database),
+    isTextType: isTextType.bind(null, server, database),
     updateValues: updateValues.bind(null, server, database),
     getQuerySelectTop: getQuerySelectTop.bind(null, server, database),
     getTableCreateScript: getTableCreateScript.bind(null, server, database),
@@ -44,6 +46,8 @@ export function createConnection(server, database) {
     getTableDeleteScript: getTableDeleteScript.bind(null, server, database),
     getViewCreateScript: getViewCreateScript.bind(null, server, database),
     getRoutineCreateScript: getRoutineCreateScript.bind(null, server, database),
+    getAllowedMaxLengthOfColumn: getAllowedMaxLengthOfColumn.bind(null, server, database),
+    getAllowedEnumValuesOfColumn: getAllowedEnumValuesOfColumn.bind(null, server, database),
     truncateAllTables: truncateAllTables.bind(null, server, database),
     async currentDatabase() {
       return database.database
@@ -187,6 +191,16 @@ function query(server, database, queryText) {
   return database.connection.query(queryText);
 }
 
+function isSelectableType(server, database, dataType) {
+  checkIsConnected(server, database)
+  return database.connection.isSelectableType(dataType)
+}
+
+function isTextType(server, database, dataType) {
+  checkIsConnected(server, database)
+  return database.connection.isTextType(dataType)
+}
+
 function updateValues(server, database, updates) {
   checkIsConnected(server, database)
   return database.connection.updateValues(updates)
@@ -266,6 +280,16 @@ function getViewCreateScript(server, database, view /* , schema */) {
 function getRoutineCreateScript(server, database, routine, type, schema) {
   checkIsConnected(server, database);
   return database.connection.getRoutineCreateScript(routine, type, schema);
+}
+
+function getAllowedMaxLengthOfColumn(server, database, columnName) {
+  checkIsConnected(server, database);
+  return database.connection.getAllowedMaxLengthOfColumn(columnName);
+}
+
+function getAllowedEnumValuesOfColumn(server, database, columnName) {
+  checkIsConnected(server, database);
+  return database.connection.getAllowedEnumValuesOfColumn(columnName);
 }
 
 function truncateAllTables(server, database, schema) {

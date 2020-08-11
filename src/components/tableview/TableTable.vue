@@ -145,75 +145,10 @@ export default {
     },
     tableKeys() {
       const result = {}
-      console.log(this.rawTableKeys)
       this.rawTableKeys.forEach((item) => {
         result[item.fromColumn] = item
       })
       return result
-    },
-    tableColumns() {
-      const results = []
-      // 1. add a column for a real column
-      // if a FK, add another column with the link
-      // to the FK table.
-      this.table.columns.forEach(column => {
-
-        const keyData = this.tableKeys[column.columnName]
-        const editable = this.editable && column.columnName !== this.primaryKey
-
-        const headerTooltip = (cell) => {
-          return `${cell.getDefinition().title}: ${column.dataType}`
-        }
-
-        const result = {
-          title: column.columnName,
-          field: column.columnName,
-          mutatorData: this.resolveDataMutator(column.dataType),
-          dataType: column.dataType,
-          cellClick: this.cellClick,
-          editable: editable,
-          editor: editable ? 'input' : undefined,
-          editorParams: {
-            search: true,
-            // elementAttributes: {
-            //   maxLength: column.columnLength // TODO
-            // }
-          },
-          cellEdited: this.cellEdited,
-          headerTooltip
-        }
-        results.push(result)
-        if (keyData) {
-          const icon = (cell) => {
-            if (cell.getValue() === NULL) {
-              return null
-            }
-
-            return "<i class='material-icons fk-link'>launch</i>"
-          }
-          const tooltip = (cell) => {
-            if (cell.getValue() === NULL) {
-              return false
-            }
-
-            return `View records in ${keyData.toTable} with ${keyData.toColumn} = ${cell.getValue()}`
-          }
-          const keyResult = {
-            headerSort: false,
-            download: false,
-            field: column.columnName,
-            title: "",
-            cssClass: "foreign-key-button",
-            cellClick: this.fkClick,
-            formatter: icon,
-            tooltip
-          }
-          result.cssClass = 'foreign-key'
-          results.push(keyResult)
-        }
-
-      });
-      return results
     },
     filterValue() {
       return this.filter.value;
@@ -223,7 +158,7 @@ export default {
         return [];
       }
 
-      return [{ column: this.table.columns[0].columnName, dir: "asc" }];
+      return [{column: this.table.columns[0].columnName, dir: "asc"}];
     }
   },
 
@@ -257,7 +192,7 @@ export default {
     this.primaryKey = await this.connection.getPrimaryKey(this.table.name, this.table.schema)
     this.tabulator = new Tabulator(this.$refs.table, {
       height: this.actualTableHeight,
-      columns: this.tableColumns,
+      columns: await this.tableColumns(),
       nestedFieldSeparator: false,
       ajaxURL: "http://fake",
       ajaxSorting: true,
@@ -300,6 +235,134 @@ export default {
       }
       log.debug('fk-click: clicked ', value, keyData)
       this.$root.$emit('loadTable', payload)
+    },
+    async tableColumns() {
+      const results = []
+      // 1. add a column for a real column
+      // if a FK, add another column with the link
+      // to the FK table.
+      for (const column of this.table.columns) {
+
+        const keyData = this.tableKeys[column.columnName]
+        const editable = this.editable && column.columnName !== this.primaryKey
+
+        const headerTooltip = (cell) => {
+          return `${cell.getDefinition().title}: ${column.dataType}`
+        }
+
+        const result = {
+          title: column.columnName,
+          field: column.columnName,
+          mutatorData: this.resolveDataMutator(column.dataType),
+          dataType: column.dataType,
+          cellClick: this.cellClick,
+          editable: editable,
+          editor: editable ? this.getEditorType(column.dataType) : undefined,
+          editorParams: await this.getEditorParams(column),
+          cellEdited: this.cellEdited,
+          headerTooltip
+        }
+
+        results.push(result)
+        if (keyData) {
+          const icon = (cell) => {
+            if (cell.getValue() === NULL) {
+              return null
+            }
+
+            return "<i class='material-icons fk-link'>launch</i>"
+          }
+          const tooltip = (cell) => {
+            if (cell.getValue() === NULL) {
+              return false
+            }
+
+            return `View records in ${keyData.toTable} with ${keyData.toColumn} = ${cell.getValue()}`
+          }
+          const keyResult = {
+            headerSort: false,
+            download: false,
+            field: column.columnName,
+            title: "",
+            cssClass: "foreign-key-button",
+            cellClick: this.fkClick,
+            formatter: icon,
+            tooltip
+          }
+          result.cssClass = 'foreign-key'
+          results.push(keyResult)
+        }
+
+      }
+      return results
+    },
+    getEditorType(dataType) {
+      const dataTypeWithoutLength = dataType.split('(')[0]
+      if (dataTypeWithoutLength === 'enum') {
+        return 'select'
+      } else if (dataTypeWithoutLength === 'date') {
+        return this.dateEditor
+      }
+
+      return 'input';
+    },
+    dateEditor(cell, onRendered, success, cancel) {
+      var input = document.createElement("input");
+      input.setAttribute("type", "date");
+
+      input.style.padding = "4px";
+      input.style.width = "100%";
+      input.style.boxSizing = "border-box";
+
+      input.value = cell.getValue();
+
+      onRendered(function () {
+        input.focus();
+        input.style.height = "100%";
+      });
+
+      function onChange() {
+        // eslint-disable-next-line no-undef
+        if (input.value != cell.getValue()) {
+          success(input.value);
+        } else {
+          cancel();
+        }
+      }
+
+      //submit new value on blur or change
+      input.addEventListener("blur", onChange);
+
+      //submit new value on enter
+      input.addEventListener("keydown", function (e) {
+        if (e.keyCode === 13) {
+          onChange();
+        }
+
+        if (e.keyCode === 27) {
+          cancel();
+        }
+      });
+
+      return input;
+    },
+    async getEditorParams(column) {
+      const dataType = column.dataType
+      const params = {
+        search: true
+      }
+
+      if (this.connection.isSelectableType(dataType)) {
+        params.values = await this.connection.getAllowedEnumValuesOfColumn(column.columnName)
+      }
+
+      if (this.connection.isTextType(dataType)) {
+        params.elementAttributes = {
+          maxlength: await this.connection.getAllowedMaxLengthOfColumn(column.columnName) //dont work ?!
+        }
+      }
+
+      return params
     },
     cellClick(e, cell) {
       // this makes it easier to select text if not editing
@@ -416,7 +479,8 @@ export default {
             this.response = response
             this.pendingEdits = []
             this.editError = null
-            const data = this.dataToTableData({ rows: r }, this.tableColumns);
+
+            const data = this.dataToTableData({rows: r}, await this.tableColumns());
             this.data = data
             this.lastUpdated = Date.now()
             this.totalRecords = totalRecords

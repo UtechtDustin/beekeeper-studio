@@ -46,10 +46,14 @@ export default async function (server, database) {
     executeQuery: (queryText) => executeQuery(conn, queryText),
     listDatabases: (filter) => listDatabases(conn, filter),
     selectTop: (table, offset, limit, orderBy, filters) => selectTop(conn, table, offset, limit, orderBy, filters),
+    isSelectableType: (dataType) => isSelectableType(dataType),
+    isTextType: (dataType) => isTextType(dataType),
     w: (table, limit) => getQuerySelectTop(conn, table, limit),
     getTableCreateScript: (table) => getTableCreateScript(conn, table),
     getViewCreateScript: (view) => getViewCreateScript(conn, view),
     getRoutineCreateScript: (routine, type) => getRoutineCreateScript(conn, routine, type),
+    getAllowedMaxLengthOfColumn: (columnName) => getAllowedMaxLengthOfColumn(conn, columnName),
+    getAllowedEnumValuesOfColumn: (columnName) => getAllowedEnumValuesOfColumn(conn, columnName),
     truncateAllTables: () => truncateAllTables(conn),
   };
 }
@@ -348,6 +352,16 @@ export async function listDatabases(conn, filter) {
     .map((row) => row.Database);
 }
 
+export function isSelectableType(dataType) {
+  const dataTypeWithoutLength = dataType.split('(')[0]
+  return dataTypeWithoutLength === 'enum'
+}
+
+export function isTextType(dataType) {
+  const dataTypeWithoutLength = dataType.split('(')[0]
+  console.log(dataTypeWithoutLength, ['varchar', 'char', 'text'].includes(dataTypeWithoutLength))
+  return ['varchar', 'char', 'text'].includes(dataTypeWithoutLength)
+}
 
 export function getQuerySelectTop(conn, table, limit) {
   return `SELECT * FROM ${wrapIdentifier(table)} LIMIT ${limit}`;
@@ -375,6 +389,38 @@ export async function getRoutineCreateScript(conn, routine, type) {
   const { data } = await driverExecuteQuery(conn, { query: sql });
 
   return data.map((row) => row[`Create ${type}`]);
+}
+
+export async function getAllowedMaxLengthOfColumn(conn, columnName) {
+  const sql = `
+    SELECT
+        CHARACTER_MAXIMUM_LENGTH as maxLength 
+    FROM information_schema.columns
+    WHERE table_schema = DATABASE()
+      AND table_name = 'employees'
+      AND COLUMN_NAME = ?
+  `;
+
+  const params = [columnName]
+  const { data } = await driverExecuteQuery(conn, { query: sql, params });
+
+  return data.find((row) => row['maxLength'])['maxLength'];
+}
+
+export async function getAllowedEnumValuesOfColumn(conn, columnName) {
+  const sql = `
+    SELECT SUBSTRING(COLUMN_TYPE, 6, CHAR_LENGTH(COLUMN_TYPE) -6) as enum
+    FROM information_schema.COLUMNS
+    WHERE TABLE_SCHEMA = database()
+      AND TABLE_NAME = 'employees'
+      AND COLUMN_NAME = ?
+  `;
+
+  const params = [columnName]
+  const { data } = await driverExecuteQuery(conn, { query: sql, params });
+
+  const rawEnumString = data.find((row) => row['enum'])['enum'];
+  return rawEnumString.replace(/'/g, '').split(",")
 }
 
 export function wrapIdentifier(value) {
